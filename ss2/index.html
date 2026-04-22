@@ -46,7 +46,8 @@
                 if (player.mode === 'cube') {
                     if (player.jumpCount < 2) { player.dy = player.jumpForce; player.jumpCount++; }
                 } else {
-                    player.dy -= 1.8; // Fly mode physics
+                    player.dy -= 4; // Fly mode thrust
+                    if (player.dy < -8) player.dy = -8; // cap upward speed
                 }
             }
         });
@@ -176,7 +177,7 @@
             if (isGameOver) return;
             frame++;
 
-            player.dy += player.gravity;
+            player.dy += player.mode === 'ship' ? 0.15 : player.gravity;
             player.y += player.dy;
 
             if (player.y + player.h > canvas.height) { player.y = canvas.height - player.h; player.dy = 0; player.jumpCount = 0; }
@@ -194,7 +195,10 @@
                 if (player.x < obs.x + obs.w && player.x + player.w > obs.x &&
                     player.y < obs.y + obs.h && player.y + player.h > obs.y) {
                     if (obs.type === 'portal') {
-                        if (player.mode !== obs.portalType) player.mode = obs.portalType;
+                        if (player.mode !== obs.portalType) {
+                            player.mode = obs.portalType;
+                            if (obs.portalType === 'ship') { player.dy = -4; } // launch upward on entry
+                        }
                     } else { gameOver(); }
                 }
                 if (obs.x + obs.w < 0) obstacles.splice(index, 1);
