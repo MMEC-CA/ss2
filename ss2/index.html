@@ -1,11 +1,252 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ss2</title>
-  </head>
-  <body>
-    <p>ss2</p>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fly-Rex Celebration Dash</title>
+    <style>
+        body { margin: 0; background: #080808; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; color: gold; font-family: 'Courier New', Courier, monospace; }
+        canvas { border: 4px solid gold; background: #000; box-shadow: 0 0 25px rgba(255, 215, 0, 0.4); }
+        .info { margin-top: 10px; text-align: center; font-size: 14px; opacity: 0.8; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <h2 id="levelDisplay">Level: 1</h2>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div class="info">SPACE/UP to Jump/Flap | Hit Portals to Transform</div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelDisplay = document.getElementById('levelDisplay');
+
+        canvas.width = 600;
+        canvas.height = 300;
+
+        let score = 0, level = 1, gameSpeed = 5, isGameOver = false, frame = 0;
+
+        const player = {
+            x: 50, y: 250, w: 32, h: 38,
+            dy: 0, gravity: 0.8, jumpForce: -12,
+            grounded: false, jumpCount: 0,
+            mode: 'cube', // 'cube' (walking) or 'ship' (flying)
+            baseColor: '#D4AF37', // Gold/Bronze body color
+            flyColor: '#00FFFF' // Cyan flying body
+        };
+
+        const obstacles = [];
+        const colors = ['#00FF00', '#BF00FF', '#0000FF', '#FF0000', '#FF8C00', '#FFFF00', '#FFD700'];
+
+        // Input handling
+        window.addEventListener('keydown', e => {
+            if (e.code === 'Space' || e.code === 'ArrowUp') {
+                if (isGameOver) return restart();
+                if (player.mode === 'cube') {
+                    if (player.jumpCount < 2) { player.dy = player.jumpForce; player.jumpCount++; }
+                } else {
+                    player.dy -= 1.8; // Fly mode physics
+                }
+            }
+        });
+
+        // --- DRAWING THE T-REX (WITH BUTTERFLY WINGS) ---
+        function drawPlayer(ctx, px, py, pw, ph, isFlying) {
+            ctx.save();
+            ctx.translate(px, py);
+
+            const rexColor = isFlying ? player.flyColor : player.baseColor;
+           
+            // Dynamic rotation based on movement
+            if (player.dy < 0) ctx.rotate(-6 * Math.PI / 180);
+            if (player.dy > 1.5) ctx.rotate(6 * Math.PI / 180);
+
+            // Set Glow for Celebration feel
+            ctx.shadowBlur = isFlying ? 25 : 12;
+            ctx.shadowColor = isFlying ? 'cyan' : rexColor;
+
+            // --- THE WINGS (MONARCH STYLE) ---
+            const wingColor = '#FF8C00'; // Deep Orange
+            ctx.fillStyle = wingColor;
+            ctx.strokeStyle = '#222'; // Monarch black veins
+            ctx.lineWidth = 1.5;
+
+            // Wing animation logic
+            let flapFactor = isFlying ? Math.sin(frame * 0.4) : 0.8; // Static on ground
+            let angleA = 30 * flapFactor; // Main flapping angle
+            let angleB = -10 * flapFactor; // Minor flaring angle
+
+            // Helper to draw a single Monarch wing
+            function drawWing(offsetX, scaleX) {
+                ctx.save();
+                ctx.scale(scaleX, 1);
+                ctx.translate(offsetX, ph * 0.4); // Position on back
+                ctx.rotate(angleA * Math.PI / 180);
+
+                ctx.beginPath();
+                // Core Wing Shape
+                ctx.moveTo(0, 0);
+                ctx.bezierCurveTo(pw * 0.3, -ph * 0.4, pw * 0.6, -ph * 0.2, pw * 0.7, 0);
+                ctx.lineTo(pw * 0.8, ph * 0.3);
+                ctx.bezierCurveTo(pw * 0.5, ph * 0.8, pw * 0.2, ph * 0.6, 0, ph * 0.3);
+                ctx.closePath();
+                ctx.fill();
+
+                // Monarch Veins (Subtle lines)
+                ctx.beginPath();
+                ctx.moveTo(pw*0.1, -ph*0.1); ctx.lineTo(pw*0.7, 0);
+                ctx.moveTo(pw*0.1, ph*0.1); ctx.lineTo(pw*0.8, ph*0.3);
+                ctx.moveTo(pw*0.2, ph*0.3); ctx.lineTo(pw*0.5, ph*0.8);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+
+            // Draw two wings with dynamic separation
+            let separation = isFlying ? 15 + flapFactor*3 : 10;
+            drawWing(separation, 1); // Right wing
+            drawWing(-separation + pw*0.3, -1); // Left wing (mirrored)
+
+            // --- MAIN T-REX BODY & TAIL ---
+            ctx.fillStyle = rexColor;
+            ctx.shadowBlur = 0; // Body is solid, wings are bright
+            ctx.beginPath();
+            ctx.moveTo(0, ph * 0.7); // Tail start
+            ctx.bezierCurveTo(pw * 0.2, -ph * 0.2, pw * 0.7, ph * 0.1, pw * 0.9, ph * 0.2); // Back/Top
+            ctx.lineTo(pw, ph * 0.3); // Nose
+            ctx.lineTo(pw, ph * 0.5); // Jaw
+            ctx.lineTo(pw * 0.8, ph * 0.5); // Neck
+            ctx.lineTo(pw * 0.6, ph * 0.7); // Belly
+            ctx.bezierCurveTo(pw * 0.5, ph, pw * 0.1, ph, 0, ph * 0.7); // Under belly
+            ctx.closePath();
+            ctx.fill();
+
+            // Head Detail (Snout line)
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // THE EYE
+            ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(pw * 0.82, ph * 0.32, pw * 0.08, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "black"; ctx.beginPath(); ctx.arc(pw * 0.85, ph * 0.32, pw * 0.04, 0, Math.PI * 2); ctx.fill();
+
+            // TINY ARMS
+            ctx.strokeStyle = rexColor; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(pw * 0.65, ph * 0.55); ctx.lineTo(pw * 0.75, ph * 0.65); ctx.lineTo(pw * 0.72, ph * 0.7); ctx.stroke();
+
+            // LEGS (Animate when running on ground)
+            ctx.lineWidth = 3;
+            if (isFlying) {
+                // Tuck legs while flying
+                ctx.beginPath(); ctx.moveTo(pw * 0.3, ph * 0.8); ctx.lineTo(pw * 0.4, ph * 0.9); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(pw * 0.5, ph * 0.8); ctx.lineTo(pw * 0.6, ph * 0.9); ctx.stroke();
+            } else {
+                // Running animation
+                const legOffset = Math.sin(frame * 0.3) * 6;
+                ctx.beginPath(); ctx.moveTo(pw * 0.35, ph * 0.75); ctx.lineTo(pw * 0.35 + legOffset, ph + 2); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(pw * 0.55, ph * 0.75); ctx.lineTo(pw * 0.55 - legOffset, ph + 2); ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        // --- Game Setup (Same Logic) ---
+        function spawnObstacle() {
+            let type = Math.random();
+            let obs = { x: canvas.width, w: 30, passed: false };
+
+            if (type < 0.6) { // Pillar
+                obs.type = 'pillar';
+                obs.h = 40 + Math.random() * 80;
+                obs.y = canvas.height - obs.h;
+                obs.color = colors[Math.floor(Math.random() * colors.length)];
+            } else if (type < 0.8) { // Portal
+                obs.type = 'portal'; obs.w = 40; obs.h = 90;
+                obs.y = 80 + Math.random() * 100;
+                obs.portalType = Math.random() > 0.5 ? 'ship' : 'cube';
+                obs.color = obs.portalType === 'ship' ? '#BF00FF' : '#00FF00'; // Purple=Fly, Green=Run
+            } else { // Spike
+                obs.type = 'spike'; obs.h = 30; obs.y = canvas.height - 30; obs.color = '#FF0000';
+            }
+            obstacles.push(obs);
+        }
+
+        function update() {
+            if (isGameOver) return;
+            frame++;
+
+            player.dy += player.gravity;
+            player.y += player.dy;
+
+            if (player.y + player.h > canvas.height) { player.y = canvas.height - player.h; player.dy = 0; player.jumpCount = 0; }
+            if (player.y < 0) { player.y = 0; player.dy = 0; }
+
+            if (frame % 100 === 0) {
+                score++;
+                if (score % 10 === 0) { level++; gameSpeed += 0.6; levelDisplay.innerText = `Level: ${level}`; }
+            }
+
+            if (frame % Math.max(25, Math.floor(95 - gameSpeed * 2.5)) === 0) spawnObstacle();
+
+            obstacles.forEach((obs, index) => {
+                obs.x -= gameSpeed;
+                if (player.x < obs.x + obs.w && player.x + player.w > obs.x &&
+                    player.y < obs.y + obs.h && player.y + player.h > obs.y) {
+                    if (obs.type === 'portal') {
+                        if (player.mode !== obs.portalType) player.mode = obs.portalType;
+                    } else { gameOver(); }
+                }
+                if (obs.x + obs.w < 0) obstacles.splice(index, 1);
+            });
+        }
+
+        function draw() {
+            ctx.fillStyle = '#060606'; // Extra dark
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+           
+            // Dynamic Grid
+            ctx.strokeStyle = `hsla(${(frame*0.5) % 360}, 60%, 50%, 0.12)`;
+            ctx.lineWidth = 1;
+            for(let i=0; i<canvas.width * 1.5; i+=40) {
+                ctx.beginPath();
+                const shift = (frame * (gameSpeed/2)) % 40;
+                ctx.moveTo(i - shift, 0); ctx.lineTo(i - shift - 50, canvas.height); ctx.stroke();
+            }
+
+            // Draw Obstacles
+            ctx.shadowBlur = 0;
+            obstacles.forEach(obs => {
+                ctx.fillStyle = obs.color;
+                if (obs.type === 'spike') {
+                    ctx.shadowBlur = 7; ctx.shadowColor = 'red';
+                    ctx.beginPath(); ctx.moveTo(obs.x, obs.y + obs.h); ctx.lineTo(obs.x + obs.w/2, obs.y); ctx.lineTo(obs.x + obs.w, obs.y + obs.h); ctx.fill();
+                    ctx.shadowBlur = 0;
+                } else if (obs.type === 'portal') {
+                    ctx.shadowBlur = 20 + Math.sin(frame*0.1)*5; ctx.shadowColor = obs.color;
+                    ctx.strokeStyle = obs.color; ctx.lineWidth = 4; ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
+                    ctx.fillStyle = "white"; ctx.font = "bold 12px Courier New";
+                    ctx.fillText(obs.portalType === 'ship' ? "FLY" : "RUN", obs.x + 8, obs.y + obs.h/2);
+                    ctx.shadowBlur = 0;
+                } else { ctx.fillRect(obs.x, obs.y, obs.w, obs.h); }
+            });
+
+            // Draw the Monarch Rex
+            drawPlayer(ctx, player.x, player.y, player.w, player.h, player.mode === 'ship');
+
+            if (isGameOver) {
+                ctx.shadowBlur = 0; ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,canvas.width, canvas.height);
+                ctx.fillStyle = "white"; ctx.font = "40px Courier New"; ctx.textAlign = "center";
+                ctx.fillText("REX DOWN!", canvas.width/2, canvas.height/2);
+                ctx.font = "20px Courier New"; ctx.fillText("Score: " + score + " - Press Space", canvas.width/2, canvas.height/2 + 40);
+                ctx.textAlign = "left";
+            }
+        }
+
+        function gameOver() { isGameOver = true; }
+        function restart() { score = 0; level = 1; gameSpeed = 5; obstacles.length = 0; player.mode = 'cube'; player.y = 200; player.dy = 0; isGameOver = false; levelDisplay.innerText = `Level: ${level}`; }
+        function loop() { update(); draw(); requestAnimationFrame(loop); }
+        loop();
+    </script>
+</body>
 </html>
